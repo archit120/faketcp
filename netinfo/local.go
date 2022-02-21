@@ -103,3 +103,4 @@ func (l *Local) GetInterfaceByName(name string) (*LocalInterface, error) {
 	}
 	return nil, fmt.Errorf("interface %v not found", name)
 }
+

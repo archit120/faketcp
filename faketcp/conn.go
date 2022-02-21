@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/archit120/ethernet-go/header"
+	"github.com/archit120/faketcp/header"
 )
 
 var CONNCHANBUFSIZE = 1024
@@ -32,15 +32,17 @@ type Conn struct {
 	LastUpdate    time.Time
 }
 
-func NewConn(localAddr [4]byte, remoteAddr [4]byte, state int, fd int) *Conn {
+func NewConn(localAddr []byte, localPort int, remoteAddr []byte, remotePort int, state int, fd int) *Conn {
 	conn := &Conn{
-		localAddress:  localAddr,
-		remoteAddress: remoteAddr,
-		fd:			   fd,
+		localPort:     localPort,
+		remotePort:    remotePort,
+		fd:            fd,
 		State:         state,
 		LastUpdate:    time.Now(),
 		nextSYN:       1,
 	}
+	copy(conn.localAddress[:], localAddr)
+	copy(conn.remoteAddress[:], remoteAddr)
 	go conn.keepAlive()
 	return conn
 }
@@ -74,36 +76,12 @@ func (conn *Conn) keepAlive() {
 
 //Block
 func (conn *Conn) Read(b []byte) (n int, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			n, err = -1, io.EOF
-		}
-	}()
-	if conn.State != CONNECTED {
-		return -1, io.EOF
+	n, err = conn.ReadWithHeader(b)
+	if err != nil {
+		return 0, err
 	}
-
-	for {
-		s, ok := <-conn.InputChan
-		if !ok {
-			return -1, io.EOF
-		}
-
-		_, _, _, _, data, _ := header.Get([]byte(s))
-		ls, ln := len(data), len(b)
-		if ls < 0 {
-			continue
-		}
-
-		l := ls
-		if ln < ls {
-			l = ln
-		}
-		for i := 0; i < l; i++ {
-			b[i] = data[i]
-		}
-		return ls, nil
-	}
+	copy(b, b[20:])
+	return n - 20, err
 }
 
 //Block
@@ -118,23 +96,26 @@ func (conn *Conn) Write(b []byte) (n int, err error) {
 	return conn.WriteWithHeader(packet)
 }
 
-//NoBlock
+//Blocks and Reads
 func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
-	
-	n, from, err := syscall.Recvfrom(conn.fd, b, 0)
-	for ; err == nil && from.(*syscall.SockaddrInet4).Addr != conn.remoteAddress ;{
-		n, from, err = syscall.Recvfrom(conn.fd, b, 0)
-	}
 
+	n, from, err := syscall.Recvfrom(conn.fd, b, 0)
+	for err == nil && from.(*syscall.SockaddrInet4).Addr != conn.remoteAddress {
+		// Also verify port and checksum !!!
+		// Maybe can ignore checksum
+		n, from, err = syscall.Recvfrom(conn.fd, b, 0)
+
+	}
+	n = copy(b, b[20:n])
 	return n, err
 }
 
-//NoBlock
+//B
 func (conn *Conn) WriteWithHeader(b []byte) (n int, err error) {
 	to := syscall.SockaddrInet4{
 		Port: conn.remotePort,
 		Addr: conn.remoteAddress,
-	} 
+	}
 	return len(b), syscall.Sendto(conn.fd, b, 0, to)
 }
 
@@ -255,21 +236,6 @@ func (conn *Conn) CloseResponse() (err error) {
 
 func (conn *Conn) Close() error {
 	conn.CloseRequest()
-	key := conn.LocalAddr().String() + ":" + conn.RemoteAddr().String()
-	faketcpServer.CloseConn(key)
-
-	go func() {
-		defer func() {
-			recover()
-		}()
-		close(conn.InputChan)
-	}()
-	go func() {
-		defer func() {
-			recover()
-		}()
-		close(conn.OutputChan)
-	}()
 	return nil
 }
 

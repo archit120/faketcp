@@ -74,12 +74,20 @@ func (r *Route) Load(fname string) error {
 	return nil
 }
 
-func (r *Route) GetGateway(dst uint32) (uint32, error) {
+func (r *Route) GetDevice(dst uint32) (string, error) {
 	ln := len(r.routes)
+	longestMatch := uint32(0)
+	returnDevice := ""
 	for i := ln - 1; i >= 0; i-- {
 		if dst&r.routes[i].Mask == r.routes[i].Dest {
-			return r.routes[i].Gateway, nil
+			if r.routes[i].Mask > longestMatch {
+				longestMatch = r.routes[i].Mask
+				returnDevice = r.routes[i].Device
+			}
 		}
 	}
-	return 0, fmt.Errorf("can't find route")
+	if returnDevice != "" {
+		return returnDevice, nil
+	}
+	return "", fmt.Errorf("can't find route")
 }

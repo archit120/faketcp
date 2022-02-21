@@ -1,4 +1,2 @@
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=
 github.com/patrickmn/go-cache v2.1.0+incompatible/go.mod h1:3Qf8kWWT7OJRJbdiICTKqZju1ZixQ/KpMGzzAfe6+WQ=
-github.com/archit120/ethernet-go v0.0.0-20190909031926-c050ee4cc5ac h1:XN9ACsKobgzYTmlMIul6HfPUpHLcp9+pOb6EMgh5iSY=
-github.com/archit120/ethernet-go v0.0.0-20190909031926-c050ee4cc5ac/go.mod h1:wNiBVHM/hEopahlaERpC8+e4gXCUSS1Z2+rKqI6cPPA=

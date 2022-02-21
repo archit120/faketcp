@@ -32,7 +32,7 @@ func b2ip(bs []byte) (uint32, error) {
 }
 
 //127.0.0.1 -> uint32
-func s2ip(s string) (uint32, error) {
+func S2ip(s string) (uint32, error) {
 	ss := strings.Split(s, ".")
 	if len(ss) != 4 {
 		return 0, fmt.Errorf("ip %v error", s)
@@ -63,4 +63,19 @@ func iprs2ip(s string) uint32 {
 	s = s[6:8] + s[4:6] + s[2:4] + s[0:2]
 	r, _ := strconv.ParseUint(s, 16, 32)
 	return uint32(r)
+}
+
+var routes, _ = NewRoute()
+var locals, _ = NewLocal()
+
+func GetSrcIpForDst(ip uint32) (uint32, error) {
+	dev, err := routes.GetDevice(ip)
+	if err != nil {
+		return 0, err
+	}
+	int, err := locals.GetInterfaceByName(dev)
+	if err != nil {
+		return 0, err
+	}
+	return int.Ip, nil
 }

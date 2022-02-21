@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/patrickmn/go-cache"
-	"github.com/archit120/ethernet-go/header"
+	"github.com/archit120/faketcp/header"
 )
 
 var LISTENERBUFSIZE = 1024

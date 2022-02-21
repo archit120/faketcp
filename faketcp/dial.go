@@ -1,12 +1,17 @@
 package faketcp
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/archit120/ethernet-go/header"
+	"github.com/archit120/faketcp/header"
+	"github.com/archit120/faketcp/netinfo"
 )
 
 const (
@@ -25,9 +30,25 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 		return nil, err
 	}
 
-	conn := NewConn(localAddr.String(), remoteAddr, CONNECTING, fd)
+	ip := strings.Split(remoteAddr, ":")
+	ipu, err := netinfo.S2ip(ip[0])
+	if err != nil {
+		return nil, err
+	}
+	ipb := make([]byte, 4)
+	binary.BigEndian.PutUint32(ipb, ipu)
 
-	ipHeader, tcpHeader := header.BuildTcpHeader(localAddr.String(), remoteAddr)
+	ips, err := netinfo.GetSrcIpForDst(ipu)
+	if err != nil {
+		return nil, err
+	}
+	ipbs := make([]byte, 4)
+	binary.BigEndian.PutUint32(ipbs, ips)
+
+	localPort := uint16(rand.Int())
+	remotePort, err := strconv.Atoi(ip[1])
+	conn := NewConn(ipbs, int(localPort), ipb, remotePort, CONNECTING, fd)
+	tcpHeader := header.BuildTcpHeader(localAddr.String(), remoteAddr)
 	tcpHeader.Seq = 0
 	tcpHeader.Flags = header.SYN
 	packet := header.BuildTcpPacket(ipHeader, tcpHeader, []byte{})
