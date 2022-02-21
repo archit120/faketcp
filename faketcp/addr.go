@@ -1,7 +1,7 @@
-package ptcp
+package faketcp
 
 type Addr struct {
-	addr string
+	addr [4]byte
 }
 
 func NewAddr(addr string) *Addr {
@@ -11,7 +11,7 @@ func NewAddr(addr string) *Addr {
 }
 
 func (a *Addr) Network() string {
-	return "ptcp"
+	return "faketcp"
 }
 
 func (a *Addr) String() string {

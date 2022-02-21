@@ -1,12 +1,13 @@
-package ptcp
+package faketcp
 
 import (
 	"fmt"
 	"io"
 	"net"
+	"syscall"
 	"time"
 
-	"github.com/xitongsys/ethernet-go/header"
+	"github.com/archit120/ethernet-go/header"
 )
 
 var CONNCHANBUFSIZE = 1024
@@ -20,22 +21,25 @@ const (
 )
 
 type Conn struct {
-	localAddress  *Addr
-	remoteAddress *Addr
-	InputChan     chan string
-	OutputChan    chan string
+	localAddress  [4]byte
+	localPort     int
+	remoteAddress [4]byte
+	remotePort    int
 	State         int
+	fd            int
+	nextSYN       int
+	nextACK       int
 	LastUpdate    time.Time
 }
 
-func NewConn(localAddr string, remoteAddr string, state int) *Conn {
+func NewConn(localAddr [4]byte, remoteAddr [4]byte, state int, fd int) *Conn {
 	conn := &Conn{
-		localAddress:  NewAddr(localAddr),
-		remoteAddress: NewAddr(remoteAddr),
-		InputChan:     make(chan string, CONNCHANBUFSIZE),
-		OutputChan:    make(chan string, CONNCHANBUFSIZE),
+		localAddress:  localAddr,
+		remoteAddress: remoteAddr,
+		fd:			   fd,
 		State:         state,
 		LastUpdate:    time.Now(),
+		nextSYN:       1,
 	}
 	go conn.keepAlive()
 	return conn
@@ -62,7 +66,7 @@ func (conn *Conn) keepAlive() {
 			tcpHeader.Seq = 1
 
 			packet := header.BuildTcpPacket(ipHeader, tcpHeader, []byte{})
-			conn.OutputChan <- string(packet)
+			conn.WriteWithHeader(packet)
 		}
 		time.Sleep(time.Second)
 	}
@@ -104,14 +108,6 @@ func (conn *Conn) Read(b []byte) (n int, err error) {
 
 //Block
 func (conn *Conn) Write(b []byte) (n int, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			n, err = -1, io.EOF
-		}
-	}()
-	if conn.State != CONNECTED {
-		return -1, io.EOF
-	}
 
 	ipHeader, tcpHeader := header.BuildTcpHeader(conn.LocalAddr().String(), conn.RemoteAddr().String())
 	tcpHeader.Flags = 0x18
@@ -119,49 +115,27 @@ func (conn *Conn) Write(b []byte) (n int, err error) {
 	tcpHeader.Seq = 1
 
 	packet := header.BuildTcpPacket(ipHeader, tcpHeader, b)
-	conn.OutputChan <- string(packet)
-	return len(b), nil
+	return conn.WriteWithHeader(packet)
 }
 
 //NoBlock
 func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			n, err = -1, io.EOF
-		}
-	}()
-
-	select {
-	case s := <-conn.InputChan:
-		data := []byte(s)
-		ls, ln := len(data), len(b)
-		l := ls
-		if ln < ls {
-			l = ln
-		}
-		for i := 0; i < l; i++ {
-			b[i] = data[i]
-		}
-		return ls, nil
-	default:
-		return 0, fmt.Errorf("failed")
+	
+	n, from, err := syscall.Recvfrom(conn.fd, b, 0)
+	for ; err == nil && from.(*syscall.SockaddrInet4).Addr != conn.remoteAddress ;{
+		n, from, err = syscall.Recvfrom(conn.fd, b, 0)
 	}
+
+	return n, err
 }
 
 //NoBlock
 func (conn *Conn) WriteWithHeader(b []byte) (n int, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			n, err = -1, io.EOF
-		}
-	}()
-
-	select {
-	case conn.OutputChan <- string(b):
-		return len(b), nil
-	default:
-		return 0, fmt.Errorf("failed")
-	}
+	to := syscall.SockaddrInet4{
+		Port: conn.remotePort,
+		Addr: conn.remoteAddress,
+	} 
+	return len(b), syscall.Sendto(conn.fd, b, 0, to)
 }
 
 func (conn *Conn) CloseRequest() (err error) {
@@ -282,7 +256,7 @@ func (conn *Conn) CloseResponse() (err error) {
 func (conn *Conn) Close() error {
 	conn.CloseRequest()
 	key := conn.LocalAddr().String() + ":" + conn.RemoteAddr().String()
-	ptcpServer.CloseConn(key)
+	faketcpServer.CloseConn(key)
 
 	go func() {
 		defer func() {

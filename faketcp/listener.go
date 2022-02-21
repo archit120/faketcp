@@ -1,11 +1,11 @@
-package ptcp
+package faketcp
 
 import (
 	"net"
 	"time"
 
 	"github.com/patrickmn/go-cache"
-	"github.com/xitongsys/ethernet-go/header"
+	"github.com/archit120/ethernet-go/header"
 )
 
 var LISTENERBUFSIZE = 1024
@@ -16,7 +16,7 @@ func Listen(proto, addr string) (net.Listener, error) {
 	}
 
 	if listener, err := NewListener(addr); err == nil {
-		ptcpServer.CreateListener(addr, listener)
+		faketcpServer.CreateListener(addr, listener)
 		return listener, err
 
 	} else {
@@ -77,7 +77,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 			if _, ok := l.requestCache.Get(src); ok {
 				l.requestCache.Delete(src)
 				conn := NewConn(dst, src, CONNECTED)
-				ptcpServer.CreateConn(dst, src, conn)
+				faketcpServer.CreateConn(dst, src, conn)
 				return conn, nil
 			}
 		}
@@ -98,7 +98,7 @@ func (l *Listener) Close() error {
 		}()
 		close(l.OutputChan)
 	}()
-	ptcpServer.CloseListener(l.Address)
+	faketcpServer.CloseListener(l.Address)
 	return nil
 }
 

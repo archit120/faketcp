@@ -1,4 +1,4 @@
-package ptcp
+package faketcp
 
 import (
 	"net"

@@ -1,16 +1,18 @@
-package ptcp
+package faketcp
 
 import (
 	"fmt"
 	"net"
+	"syscall"
 	"time"
 
-	"github.com/xitongsys/ethernet-go/header"
+	"github.com/archit120/ethernet-go/header"
 )
 
 const (
 	RETRYTIME     = 5
 	RETRYINTERVAL = 500
+	BUFFERSIZE = 65535
 )
 
 func Dial(proto string, remoteAddr string) (net.Conn, error) {
@@ -18,9 +20,12 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_TCP)
+	if err != nil {
+		return nil, err
+	}
 
-	conn := NewConn(localAddr.String(), remoteAddr, CONNECTING)
-	ptcpServer.CreateConn(localAddr.String(), remoteAddr, conn)
+	conn := NewConn(localAddr.String(), remoteAddr, CONNECTING, fd)
 
 	ipHeader, tcpHeader := header.BuildTcpHeader(localAddr.String(), remoteAddr)
 	tcpHeader.Seq = 0

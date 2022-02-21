@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/xitongsys/ptcp/ptcp"
+	"github.com/archit120/faketcp/faketcp"
 )
 
 func main() {
-	ptcp.Init("eth0")
-	conn, err := ptcp.Dial("ptcp", "127.0.0.1:12222")
+	faketcp.Init("eth0")
+	conn, err := faketcp.Dial("faketcp", "127.0.0.1:12222")
 	if err != nil {
 		fmt.Println(err)
 		return

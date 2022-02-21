@@ -1,11 +1,11 @@
-package ptcp
+package faketcp
 
 import (
 	"net"
 	"syscall"
 
-	"github.com/xitongsys/ethernet-go/header"
-	"github.com/xitongsys/ptcp/util"
+	"github.com/archit120/ethernet-go/header"
+	"github.com/archit120/faketcp/util"
 )
 
 var RAWBUFSIZE = 65535
