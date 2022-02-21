@@ -100,6 +100,8 @@ func ReCalTcpCheckSum(ipsrc uint32, ipdst uint32, bs []byte) error {
 
 	ippsbs := ipps.Marshal()
 	tcpbs := bs
+
+	// Set checksum bytes to 0
 	tcpbs[16] = 0
 	tcpbs[17] = 0
 
@@ -118,6 +120,27 @@ func ReCalTcpCheckSum(ipsrc uint32, ipdst uint32, bs []byte) error {
 	for (s>>16) > 0 {
 		s = (s>>16) + (s&0xffff)
 	}
+
+	// Insert checksum
 	binary.BigEndian.PutUint16(tcpbs[16:], ^uint16(s))
 	return nil
+}
+
+func BuildTcpPacket(ipsrc uint32, srcPort uint16, ipdst uint32, dstPort uint16, seq uint32, ack uint32, flag uint8, data []byte)  []byte {
+	tcpHeader := &TCP{
+		SrcPort: uint16(srcPort),
+		DstPort: uint16(dstPort),
+		Seq: seq,
+		Ack: ack,
+		Offset: 0x50, //hack for correct marshalling
+		Flags: flag,
+		Win: ^uint16(0),
+		Checksum: 0,
+		UrgPointer: 0,
+	}
+	result := make([]byte, len(data)+20)
+	copy(result, tcpHeader.Marshal())
+	copy(result[20:], data)
+	ReCalTcpCheckSum(ipsrc, ipdst, result)
+	return result
 }

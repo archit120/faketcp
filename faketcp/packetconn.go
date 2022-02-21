@@ -11,9 +11,6 @@ import (
 	"github.com/archit120/faketcp/netinfo"
 )
 
-var CONNCHANBUFSIZE = 1024
-var CONNTIMEOUT = 60
-
 const (
 	CONNECTING = iota
 	CONNECTED
@@ -21,11 +18,9 @@ const (
 	CLOSED
 )
 
-type Conn struct {
+type PacketConn struct {
 	localAddress  uint32
 	localPort     int
-	remoteAddress uint32
-	remotePort    int
 	State         int
 	fd            int
 	nextSEQ       int
@@ -33,12 +28,10 @@ type Conn struct {
 	LastUpdate    time.Time
 }
 
-func NewConn(localAddr uint32, localPort int, remoteAddr uint32, remotePort int, state int, fd int) *Conn {
-	conn := &Conn{
+func NewPacketConn(localAddr uint32, localPort int, state int, fd int) *PacketConn {
+	conn := &PacketConn{
 		localPort:     localPort,
 		localAddress:  localAddr,
-		remotePort:    remotePort,
-		remoteAddress: remoteAddr,
 		fd:            fd,
 		State:         state,
 		LastUpdate:    time.Now(),
@@ -46,29 +39,6 @@ func NewConn(localAddr uint32, localPort int, remoteAddr uint32, remotePort int,
 	}
 	go conn.keepAlive()
 	return conn
-}
-
-func (conn *Conn) UpdateTime() {
-	conn.LastUpdate = time.Now()
-}
-
-func (conn *Conn) IsTimeout() bool {
-	now := time.Now()
-	return now.Sub(conn.LastUpdate) > time.Second*time.Duration(CONNTIMEOUT)
-}
-
-func (conn *Conn) keepAlive() {
-	for {
-		if conn.State == CLOSED || conn.State == CLOSING {
-			return
-
-		} else if conn.State == CONNECTED {
-			tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
-			uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.FIN, []byte{})
-			conn.WriteWithHeader(tcpPacket)
-		}
-		time.Sleep(time.Second)
-	}
 }
 
 //Block needs upto 40 bytes extra :(

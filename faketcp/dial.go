@@ -21,10 +21,6 @@ const (
 )
 
 func Dial(proto string, remoteAddr string) (net.Conn, error) {
-	localAddr, err := GetLocalAddr(remoteAddr)
-	if err != nil {
-		return nil, err
-	}
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_TCP)
 	if err != nil {
 		return nil, err
@@ -47,11 +43,13 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 
 	localPort := uint16(rand.Int())
 	remotePort, err := strconv.Atoi(ip[1])
-	conn := NewConn(ipbs, int(localPort), ipb, remotePort, CONNECTING, fd)
-	tcpHeader := header.BuildTcpHeader(localAddr.String(), remoteAddr)
-	tcpHeader.Seq = 0
-	tcpHeader.Flags = header.SYN
-	packet := header.BuildTcpPacket(ipHeader, tcpHeader, []byte{})
+	if err != nil {
+		return nil, err
+	}
+
+	conn := NewConn(ips, int(localPort), ipu, remotePort, CONNECTING, fd)
+	tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
+	uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.SYN, []byte{})
 
 	done := make(chan int)
 	go func() {
@@ -62,7 +60,7 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 			default:
 			}
 
-			conn.WriteWithHeader(packet)
+			conn.WriteWithHeader(tcpPacket)
 			time.Sleep(time.Millisecond * RETRYINTERVAL)
 		}
 	}()
@@ -72,8 +70,9 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 	timeOut := false
 	for !timeOut {
 		if n, err := conn.ReadWithHeader(buf); n > 0 && err == nil {
-			_, _, _, tcpHeader, _, _ := header.Get(buf[:n])
-			if tcpHeader.Flags == (header.SYN|header.ACK) && tcpHeader.Ack == 1 {
+			var hdr header.TCP
+			hdr.Unmarshal(buf)
+			if hdr.Flags == (header.ACK | header.SYN) {
 				close(done)
 				break
 			}
@@ -92,16 +91,6 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 	}
 
 	//seq, ack := 1, tcpHeader.Seq+1
-	ipHeader, tcpHeader = header.BuildTcpHeader(localAddr.String(), remoteAddr)
-	tcpHeader.Seq = 1
-	tcpHeader.Ack = 1
-	tcpHeader.Flags = header.ACK
-	packet = header.BuildTcpPacket(ipHeader, tcpHeader, []byte{})
-
-	n, err := conn.WriteWithHeader(packet)
-	if err != nil || n != len(packet) {
-		return nil, fmt.Errorf("packet loss (expect=%v, real=%v) or %v", len(packet), n, err)
-	}
 	conn.State = CONNECTED
 	return conn, nil
 }

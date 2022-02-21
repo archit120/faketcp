@@ -10,7 +10,7 @@ import (
 
 var LISTENERBUFSIZE = 1024
 
-func Listen(proto, addr string) (net.Listener, error) {
+func ListenPacket(proto, addr string) (net.Listener, error) {
 	if _, err := net.Listen("tcp", addr); err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ type Listener struct {
 	InputChan  chan string
 	OutputChan chan string
 
-	requestCache *cache.Cache
+	connectedCache *cache.Cache
 }
 
 func NewListener(addr string) (*Listener, error) {
@@ -38,7 +38,7 @@ func NewListener(addr string) (*Listener, error) {
 		InputChan:  make(chan string, LISTENERBUFSIZE),
 		OutputChan: make(chan string, LISTENERBUFSIZE),
 
-		requestCache: cache.New(10*time.Second, 1*time.Minute),
+		connectedCache: cache.New(15*time.Second, 1*time.Minute),
 	}
 	listener.sendResponse()
 	return listener, nil

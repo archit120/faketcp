@@ -8,8 +8,7 @@ import (
 )
 
 func main() {
-	faketcp.Init("eth0")
-	conn, err := faketcp.Dial("faketcp", "127.0.0.1:12222")
+	conn, err := faketcp.Dial("faketcp", "8.8.8.8:12222")
 	if err != nil {
 		fmt.Println(err)
 		return

@@ -79,8 +79,9 @@ func (r *Route) GetDevice(dst uint32) (string, error) {
 	longestMatch := uint32(0)
 	returnDevice := ""
 	for i := ln - 1; i >= 0; i-- {
+		fmt.Printf("%d %d %d %d\n", dst, r.routes[i].Mask, dst&r.routes[i].Mask, r.routes[i].Dest)
 		if dst&r.routes[i].Mask == r.routes[i].Dest {
-			if r.routes[i].Mask > longestMatch {
+			if r.routes[i].Mask > longestMatch || returnDevice == "" {
 				longestMatch = r.routes[i].Mask
 				returnDevice = r.routes[i].Device
 			}

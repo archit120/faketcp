@@ -24,7 +24,7 @@ func hws2bs(s string) ([]byte, error) {
 }
 
 //bs -> uint32
-func b2ip(bs []byte) (uint32, error) {
+func B2ip(bs []byte) (uint32, error) {
 	if len(bs) < 4 {
 		return 0, fmt.Errorf("bs %v error", bs)
 	}

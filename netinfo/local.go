@@ -37,12 +37,12 @@ func NewLocal() (*Local, error) {
 			dev, ip, mask := "", uint32(0), uint32(0)
 			switch v := addr.(type) {
 			case *net.IPAddr:
-				ip, err = s2ip(v.IP.String())
+				ip, err = S2ip(v.IP.String())
 				if err != nil {
 					continue
 				}
 
-				mask, err = b2ip(v.IP.DefaultMask())
+				mask, err = B2ip(v.IP.DefaultMask())
 				if err != nil {
 					continue
 				}
@@ -50,12 +50,12 @@ func NewLocal() (*Local, error) {
 				dev = iface.Name
 
 			case *net.IPNet:
-				ip, err = s2ip(v.IP.String())
+				ip, err = S2ip(v.IP.String())
 				if err != nil {
 					continue
 				}
 
-				mask, err = b2ip(v.Mask)
+				mask, err = B2ip(v.Mask)
 				if err != nil {
 					continue
 				}
