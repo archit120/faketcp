@@ -43,6 +43,7 @@ func NewConn(localAddr uint32, localPort int, remoteAddr uint32, remotePort int,
 		State:         state,
 		LastUpdate:    time.Now(),
 		nextSEQ:       1,
+		nextACK:       0,
 	}
 	go conn.keepAlive()
 	return conn
@@ -64,7 +65,7 @@ func (conn *Conn) keepAlive() {
 
 		} else if conn.State == CONNECTED {
 			tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
-			uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.FIN, []byte{})
+			uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
 			conn.WriteWithHeader(tcpPacket)
 		}
 		time.Sleep(time.Second)
@@ -85,7 +86,7 @@ func (conn *Conn) Read(b []byte) (n int, err error) {
 func (conn *Conn) Write(b []byte) (n int, err error) {
 
 	return conn.WriteWithHeader(header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
-		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.SYN|header.ACK, b))
+		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, b))
 }
 
 //Blocks and Reads
@@ -95,7 +96,7 @@ func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 	ip, _ := netinfo.B2ip(from.(*syscall.SockaddrInet4).Addr[:])
 	var hdr header.TCP
 	hdr.Unmarshal(b[20:])
-	for err == nil && ip != conn.remoteAddress && hdr.DstPort != uint16(conn.localPort) {
+	for err == nil && (ip != conn.remoteAddress || hdr.DstPort != uint16(conn.localPort)) {
 		// Also verify port and checksum !!!
 		// Maybe can ignore checksum
 		n, from, err = syscall.Recvfrom(conn.fd, b, 0)
@@ -106,7 +107,11 @@ func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 		return 0, err
 	}
 	n = copy(b, b[20:n])
-	conn.nextACK = int(hdr.Seq) + n + int(hdr.Flags&header.SYN)
+	fmt.Print(hdr)
+	conn.nextACK = int(hdr.Seq) + n-20
+	if hdr.Flags&header.SYN >0 {
+		conn.nextACK += 1
+	}
 	return n, err
 }
 
@@ -172,7 +177,7 @@ func (conn *Conn) CloseRequest() (err error) {
 	if err != nil {
 		return err
 	}
-
+	conn.nextSEQ ++ 
 	tcpPacket = header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
 		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
 	conn.WriteWithHeader(tcpPacket)

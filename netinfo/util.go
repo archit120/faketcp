@@ -48,7 +48,7 @@ func S2ip(s string) (uint32, error) {
 	return res, nil
 }
 
-func ip2s(ip uint32) string {
+func Ip2s(ip uint32) string {
 	return fmt.Sprintf("%d.%d.%d.%d", (ip>>24)&(0xff), (ip>>16)&(0xff), (ip>>8)&(0xff), ip&(0xff))
 }
 

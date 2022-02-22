@@ -12,7 +12,7 @@ type LocalInterface struct {
 }
 
 func (li *LocalInterface) String() string {
-	return fmt.Sprintf("{Ip:%v, Device:%v, Mask:%v}", ip2s(li.Ip), li.Device, ip2s(li.Mask))
+	return fmt.Sprintf("{Ip:%v, Device:%v, Mask:%v}", Ip2s(li.Ip), li.Device, Ip2s(li.Mask))
 }
 
 type Local struct {
@@ -92,7 +92,7 @@ func (l *Local) GetInterfaceByIp(ip uint32) (*LocalInterface, error) {
 	if v, ok := l.localInterfaces[ip]; ok {
 		return v, nil
 	}
-	return nil, fmt.Errorf("ip %v not found", ip2s(ip))
+	return nil, fmt.Errorf("ip %v not found", Ip2s(ip))
 }
 
 func (l *Local) GetInterfaceByName(name string) (*LocalInterface, error) {

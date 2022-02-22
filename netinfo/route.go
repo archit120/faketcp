@@ -18,7 +18,7 @@ type RouteItem struct {
 }
 
 func (ri *RouteItem) String() string {
-	return fmt.Sprintf("{Dest:%v, GateWay:%v, Mask:%v, Device:%v}", ip2s(ri.Dest), ip2s(ri.Gateway), ip2s(ri.Mask), ri.Device)
+	return fmt.Sprintf("{Dest:%v, GateWay:%v, Mask:%v, Device:%v}", Ip2s(ri.Dest), Ip2s(ri.Gateway), Ip2s(ri.Mask), ri.Device)
 }
 
 type Route struct {

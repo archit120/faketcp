@@ -3,41 +3,34 @@ package main
 import (
 	"fmt"
 	"time"
+	// "time"
 
 	"github.com/archit120/faketcp/faketcp"
 )
 
 func main() {
-	faketcp.Init("eth0")
-	ln, err := faketcp.Listen("faketcp", "127.0.0.1:12222")
+	// faketcp.Init("eth0")
+	ln, err := faketcp.ListenPacket("faketcp", ":12222")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
+	var t1 time.Time
+	var t2 time.Time
+	buffer := make([]byte, 1024*1024*100)
+	c :=0
 	for {
-		if conn, err := ln.Accept(); err == nil {
-			fmt.Println("new connection: ", conn.RemoteAddr())
-			go func() {
-				for {
-					conn.Write([]byte(fmt.Sprintf("[%v] Hello", time.Now())))
-					time.Sleep(time.Second)
-				}
-			}()
-
-			go func() {
-				buf := make([]byte, 100)
-				for {
-					n, err := conn.Read(buf)
-					if err == nil && n > 0 {
-						fmt.Printf("From %v: %v\n", conn.RemoteAddr(), string(buf[:n]))
-					} else if err != nil {
-						fmt.Printf("%v error: %v\n", conn.RemoteAddr(), err)
-						break
-					}
-				}
-			}()
+		
+		n, _, _ := ln.ReadFrom(buffer)
+		if c==0 {
+			t1 = time.Now()
 		}
+		c+=n
+		if c >= 512*1024*1024 {
+			t2 = time.Now()
+			break
+		}
+		// fmt.Println(c)
 	}
-
+	fmt.Println(t2.Sub(t1))
 }

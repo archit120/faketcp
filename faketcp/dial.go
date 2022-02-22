@@ -89,6 +89,7 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+	conn.nextSEQ++
 
 	//seq, ack := 1, tcpHeader.Seq+1
 	conn.State = CONNECTED
