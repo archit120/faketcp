@@ -1,16 +1,15 @@
 package faketcp
 
 import (
-	// "net"
+	"net"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 var LISTENERBUFSIZE = 1024
 
 func ListenPacket(proto, addr string) (*PacketConn, error) {
-	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_TCP)
+	internalConn, err := net.ListenIP("ip4:6", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +20,7 @@ func ListenPacket(proto, addr string) (*PacketConn, error) {
 		return nil, err
 	}
 
-	return NewPacketConn(0, localPort, fd), nil
+	return NewPacketConn(0, localPort, internalConn), nil
 }
 
 // type Listener struct {

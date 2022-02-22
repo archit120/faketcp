@@ -50,7 +50,7 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 	conn := NewConn(ips, int(localPort), ipu, remotePort, CONNECTING, fd)
 	tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
 	uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.SYN, []byte{})
-
+	
 	done := make(chan int)
 	go func() {
 		for i := 0; i < RETRYTIME; i++ {

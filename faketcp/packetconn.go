@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/archit120/faketcp/header"
@@ -14,28 +13,34 @@ import (
 
 var PACKETCONNBUFFERSIZE = 1024
 
+type IpPortPair struct {
+	Addr *net.IPAddr
+	Port int
+}
+
 type dataAdressPair struct {
-	address *syscall.SockaddrInet4
+	address *IpPortPair
 	data    []byte
 }
 
 type PacketConn struct {
-	localPort    int
-	fd           int
-	InputChan    chan dataAdressPair
-	OutputChan   chan dataAdressPair
-	nextAck   *cache.Cache
-	nextSEQ   *cache.Cache
+	localPort  int
+	internalConn *net.IPConn
+	// fd         int
+	InputChan  chan dataAdressPair
+	OutputChan chan dataAdressPair
+	nextAck    *cache.Cache
+	nextSEQ    *cache.Cache
 }
 
-func NewPacketConn(localAddr uint32, localPort int, fd int) *PacketConn {
+func NewPacketConn(localAddr uint32, localPort int, internalConn *net.IPConn) *PacketConn {
 	conn := &PacketConn{
-		localPort:    localPort,
-		fd:           fd,
-		nextAck:   cache.New(15*time.Second, 1*time.Minute),
-		nextSEQ:   cache.New(15*time.Second, 1*time.Minute),
-		InputChan:    make(chan dataAdressPair, PACKETCONNBUFFERSIZE),
-		OutputChan:   make(chan dataAdressPair, PACKETCONNBUFFERSIZE),
+		localPort:  localPort,
+		internalConn:         internalConn,
+		nextAck:    cache.New(15*time.Second, 1*time.Minute),
+		nextSEQ:    cache.New(15*time.Second, 1*time.Minute),
+		InputChan:  make(chan dataAdressPair, PACKETCONNBUFFERSIZE),
+		OutputChan: make(chan dataAdressPair, PACKETCONNBUFFERSIZE),
 	}
 
 	go conn.bgReader()
@@ -47,32 +52,38 @@ func NewPacketConn(localAddr uint32, localPort int, fd int) *PacketConn {
 func (conn *PacketConn) bgReader() {
 	for {
 		b := make([]byte, 1500)
-		n, from, err := syscall.Recvfrom(conn.fd, b, 0)
+		n, from, err := conn.internalConn.ReadFromIP(b)
+
 		var hdr header.TCP
-		hdr.Unmarshal(b[20:])
+		hdr.Unmarshal(b)
 		for err == nil && hdr.DstPort != uint16(conn.localPort) {
 			// Maybe can ignore checksum
-			n, from, err = syscall.Recvfrom(conn.fd, b, 0)
-			hdr.Unmarshal(b[20:])
+			n, from, err = conn.internalConn.ReadFromIP(b)
+			hdr.Unmarshal(b)
 		}
+
 		if err != nil {
 			fmt.Errorf("Error occured in PacketConn bgReader")
 			fmt.Print(err)
 			return
 		}
-		from.(*syscall.SockaddrInet4).Port = int(hdr.SrcPort)
+		fromPair := &IpPortPair{
+			Addr: from,
+			Port: int(hdr.SrcPort),
+		}
 		if hdr.Flags&header.SYN > 0 {
-			conn.acceptConnection(hdr, from.(*syscall.SockaddrInet4))
-		} else if hdr.Flags & header.FIN > 0 {
-			conn.closeConnection(hdr, from.(*syscall.SockaddrInet4))
+			conn.acceptConnection(hdr, fromPair)
+		} else if hdr.Flags&header.FIN > 0 {
+			conn.closeConnection(hdr, fromPair)
 		} else {
-			n = copy(b, b[40:n])
-			remoteAdrr, _ := netinfo.B2ip(from.(*syscall.SockaddrInet4).Addr[:])
+			n = copy(b, b[20:n])
+			remoteAdrr, _ := netinfo.B2ip(from.IP)
 			key := getKey(int(hdr.SrcPort), remoteAdrr)
-			conn.nextAck.Set(key, uint32(hdr.Seq+1), cache.DefaultExpiration)
-		
+			var nextACK = hdr.Seq + uint32(n)
+			conn.nextAck.Set(key, nextACK, cache.DefaultExpiration)
+
 			conn.InputChan <- dataAdressPair{
-				address: from.(*syscall.SockaddrInet4),
+				address: fromPair,
 				data:    b[:n],
 			}
 		}
@@ -83,24 +94,24 @@ func getKey(port int, remoteAddr uint32) string {
 	return netinfo.Ip2s(remoteAddr) + ":" + strconv.Itoa(port)
 }
 
-func (conn *PacketConn) acceptConnection(tcpHeader header.TCP, from *syscall.SockaddrInet4) {
-	remoteAdrr, _ := netinfo.B2ip(from.Addr[:])
+func (conn *PacketConn) acceptConnection(tcpHeader header.TCP, from *IpPortPair) {
+	remoteAdrr, _ := netinfo.B2ip(from.Addr.IP)
 	localAddr, err := netinfo.GetSrcIpForDst(remoteAdrr)
 	if err != nil {
 		fmt.Errorf("Error in acceptConnection while finding local address to use\n")
 		return
 	}
 	tcpPacket := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr,
-		uint16(from.Port), uint32(1), uint32(tcpHeader.Seq + 1), header.SYN | header.ACK, []byte{})
-	
+		uint16(from.Port), uint32(1), uint32(tcpHeader.Seq+1), header.SYN|header.ACK, []byte{})
+
 	conn.nextAck.Set(getKey(from.Port, remoteAdrr), uint32(tcpHeader.Seq+1), cache.DefaultExpiration)
 	conn.nextSEQ.Set(getKey(from.Port, remoteAdrr), uint32(2), cache.DefaultExpiration)
 
-	syscall.Sendto(conn.fd, tcpPacket, 0, from)
+	conn.internalConn.WriteToIP(tcpPacket, from.Addr)
 }
 
-func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *syscall.SockaddrInet4) {
-	remoteAdrr, _ := netinfo.B2ip(from.Addr[:])
+func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *IpPortPair) {
+	remoteAdrr, _ := netinfo.B2ip(from.Addr.IP)
 	localAddr, err := netinfo.GetSrcIpForDst(remoteAdrr)
 	if err != nil {
 		fmt.Errorf("Error in closeConnection while finding local address to use\n")
@@ -116,10 +127,10 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *syscall.Sock
 		nextAck = 1
 	}
 	tcpPacket := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr,
-		uint16(from.Port), nextSeq.(uint32), nextAck.(uint32), header.FIN | header.ACK, []byte{})
-	
+		uint16(from.Port), nextSeq.(uint32), nextAck.(uint32), header.FIN|header.ACK, []byte{})
+
 	conn.nextAck.Delete(key)
-	syscall.Sendto(conn.fd, tcpPacket, 0, from)
+	conn.internalConn.WriteToIP(tcpPacket, from.Addr)
 }
 
 // func (conn *PacketConn) bgWriter() {
@@ -127,31 +138,29 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *syscall.Sock
 // }
 
 // //Block needs upto 40 bytes extra :(
-func (conn *PacketConn) ReadFrom(b []byte) (n int, addr *syscall.SockaddrInet4, err error) {
-	d := <- conn.InputChan
-	return copy(b, d.data), d.address, nil 
+func (conn *PacketConn) ReadFrom(b []byte) (n int, addr *IpPortPair, err error) {
+	d := <-conn.InputChan
+	return copy(b, d.data), d.address, nil
 }
 
-
-func (conn *PacketConn) WriteTo(p []byte,  addr *syscall.SockaddrInet4) (n int, err error) {
-	remoteAdrr, _ := netinfo.B2ip(addr.Addr[:])
+func (conn *PacketConn) WriteTo(p []byte, addr *IpPortPair) (n int, err error) {
+	remoteAdrr, _ := netinfo.B2ip(addr.Addr.IP)
 	localAddr, err := netinfo.GetSrcIpForDst(remoteAdrr)
 	key := getKey(addr.Port, remoteAdrr)
 	nextSeq, d := conn.nextSEQ.Get(key)
 	if !d {
-		nextSeq = 1
+		nextSeq = uint32(1)
 	}
 	nextAck, d := conn.nextAck.Get(key)
 	if !d {
-		nextAck = 1
+		nextAck = uint32(1)
 	}
 	packet := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr, uint16(addr.Port), nextSeq.(uint32), nextAck.(uint32), header.ACK, p)
-	conn.nextSEQ.Set(key, uint32(nextSeq.(uint32) + uint32(len(p))), cache.DefaultExpiration)
-	return len(p), syscall.Sendto(conn.fd, packet, 0, addr) 
+	conn.nextSEQ.Set(key, uint32(nextSeq.(uint32)+uint32(len(p))), cache.DefaultExpiration)
+	return conn.internalConn.WriteToIP(packet, addr.Addr)
 }
-		
-// WriteTo(p []byte, addr Addr) (n int, err error)
 
+// WriteTo(p []byte, addr Addr) (n int, err error)
 
 // //Block
 // func (conn *PacketConn) Write(b []byte) (n int, err error) {
@@ -306,7 +315,7 @@ func (conn *PacketConn) WriteTo(p []byte,  addr *syscall.SockaddrInet4) (n int, 
 
 func (conn *PacketConn) Close() error {
 	// conn.CloseRequest()
-	return nil
+	return conn.internalConn.Close()
 }
 func (conn *PacketConn) SetDeadline(t time.Time) error {
 	return nil
