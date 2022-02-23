@@ -96,7 +96,7 @@ func getKey(port int, remoteAddr uint32) string {
 
 func (conn *PacketConn) acceptConnection(tcpHeader header.TCP, from *IpPortPair) {
 	remoteAdrr, _ := netinfo.B2ip(from.Addr.IP)
-	localAddr, err := netinfo.GetSrcIpForDst(remoteAdrr)
+	localAddr, err := netinfo.B2ip(conn.internalConn.LocalAddr().(*net.IPAddr).IP)
 	if err != nil {
 		fmt.Errorf("Error in acceptConnection while finding local address to use\n")
 		return
@@ -120,11 +120,11 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *IpPortPair) 
 	key := getKey(from.Port, remoteAdrr)
 	nextSeq, d := conn.nextSEQ.Get(key)
 	if !d {
-		nextSeq = 1
+		nextSeq = uint32(1)
 	}
 	nextAck, d := conn.nextAck.Get(key)
 	if !d {
-		nextAck = 1
+		nextAck = uint32(1)
 	}
 	tcpPacket := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr,
 		uint16(from.Port), nextSeq.(uint32), nextAck.(uint32), header.FIN|header.ACK, []byte{})

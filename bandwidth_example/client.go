@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	// "time"
+	"github.com/pkg/profile"
 
 	"github.com/archit120/faketcp/faketcp"
 )
@@ -14,9 +15,11 @@ func main() {
 		return
 	}
 
+	defer profile.Start(profile.ProfilePath(".")).Stop()
+
 	fmt.Println("connected")
 	buf := make([]byte, 1024)
-	for i:=0; i<1024*1024; i++ {
+	for i:=0; i<512*1024; i++ {
 		conn.Write(buf)
 	}
 	// go func() {
@@ -38,7 +41,7 @@ func main() {
 	// 	time.Sleep(time.Second)
 	// }
 
-	if err = conn.Close(); err != nil {
-		fmt.Println("close error", err)
-	}
+	// if err = conn.Close(); err != nil {
+	// 	fmt.Println("close error", err)
+	// }
 }

@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/archit120/faketcp/header"
@@ -21,10 +20,6 @@ const (
 )
 
 func Dial(proto string, remoteAddr string) (net.Conn, error) {
-	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_TCP)
-	if err != nil {
-		return nil, err
-	}
 
 	ip := strings.Split(remoteAddr, ":")
 	ipu, err := netinfo.S2ip(ip[0])
@@ -34,20 +29,17 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 	ipb := make([]byte, 4)
 	binary.BigEndian.PutUint32(ipb, ipu)
 
-	ips, err := netinfo.GetSrcIpForDst(ipu)
+	ipconn, err := net.DialIP("ip4:6", nil,  &net.IPAddr{IP: ipb})
 	if err != nil {
 		return nil, err
 	}
-	ipbs := make([]byte, 4)
-	binary.BigEndian.PutUint32(ipbs, ips)
-
 	localPort := uint16(rand.Int())
 	remotePort, err := strconv.Atoi(ip[1])
 	if err != nil {
 		return nil, err
 	}
 
-	conn := NewConn(ips, int(localPort), ipu, remotePort, CONNECTING, fd)
+	conn := NewConn(ipconn, int(localPort), ipu, remotePort, CONNECTING)
 	tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
 	uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.SYN, []byte{})
 	
@@ -60,7 +52,7 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 			default:
 			}
 
-			conn.WriteWithHeader(tcpPacket)
+			fmt.Println(conn.WriteWithHeader(tcpPacket))
 			time.Sleep(time.Millisecond * RETRYINTERVAL)
 		}
 	}()
@@ -77,7 +69,6 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 				break
 			}
 		}
-
 		select {
 		case <-after:
 			err = fmt.Errorf("timeout")

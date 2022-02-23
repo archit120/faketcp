@@ -141,6 +141,6 @@ func BuildTcpPacket(ipsrc uint32, srcPort uint16, ipdst uint32, dstPort uint16, 
 	result := make([]byte, len(data)+20)
 	copy(result, tcpHeader.Marshal())
 	copy(result[20:], data)
-	ReCalTcpCheckSum(ipsrc, ipdst, result)
+	// ReCalTcpCheckSum(ipsrc, ipdst, result)
 	return result
 }

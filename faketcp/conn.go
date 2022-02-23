@@ -1,10 +1,9 @@
 package faketcp
 
 import (
-	"encoding/binary"
+	// "encoding/binary"
 	"fmt"
 	"net"
-	"syscall"
 	"time"
 
 	"github.com/archit120/faketcp/header"
@@ -27,19 +26,20 @@ type Conn struct {
 	remoteAddress uint32
 	remotePort    int
 	State         int
-	fd            int
+	internalConn  *net.IPConn
 	nextSEQ       int
 	nextACK       int
 	LastUpdate    time.Time
 }
 
-func NewConn(localAddr uint32, localPort int, remoteAddr uint32, remotePort int, state int, fd int) *Conn {
+func NewConn(internalConn *net.IPConn, localPort int, remoteAddr uint32, remotePort int, state int) *Conn {
+	laddr, _ := netinfo.B2ip(internalConn.LocalAddr().(*net.IPAddr).IP)
 	conn := &Conn{
 		localPort:     localPort,
-		localAddress:  localAddr,
+		localAddress:  laddr,
 		remotePort:    remotePort,
 		remoteAddress: remoteAddr,
-		fd:            fd,
+		internalConn:  internalConn,
 		State:         state,
 		LastUpdate:    time.Now(),
 		nextSEQ:       1,
@@ -65,7 +65,7 @@ func (conn *Conn) keepAlive() {
 
 		} else if conn.State == CONNECTED {
 			tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
-			uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
+				uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
 			conn.WriteWithHeader(tcpPacket)
 		}
 		time.Sleep(time.Second)
@@ -92,24 +92,24 @@ func (conn *Conn) Write(b []byte) (n int, err error) {
 //Blocks and Reads
 func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 
-	n, from, err := syscall.Recvfrom(conn.fd, b, 0)
-	ip, _ := netinfo.B2ip(from.(*syscall.SockaddrInet4).Addr[:])
+	n, from, err := conn.internalConn.ReadFromIP(b)
+	ip, _ := netinfo.B2ip(from.IP)
 	var hdr header.TCP
-	hdr.Unmarshal(b[20:])
+	hdr.Unmarshal(b)
 	for err == nil && (ip != conn.remoteAddress || hdr.DstPort != uint16(conn.localPort)) {
 		// Also verify port and checksum !!!
 		// Maybe can ignore checksum
-		n, from, err = syscall.Recvfrom(conn.fd, b, 0)
-		ip, _ = netinfo.B2ip(from.(*syscall.SockaddrInet4).Addr[:])
-		hdr.Unmarshal(b[20:])
+		n, from, err = conn.internalConn.ReadFromIP(b)
+		ip, _ = netinfo.B2ip(from.IP)
+		hdr.Unmarshal(b)
+		// fmt.Print(hdr)
 	}
 	if err != nil {
 		return 0, err
 	}
-	n = copy(b, b[20:n])
-	fmt.Print(hdr)
-	conn.nextACK = int(hdr.Seq) + n-20
-	if hdr.Flags&header.SYN >0 {
+
+	conn.nextACK = int(hdr.Seq) + n
+	if hdr.Flags&header.SYN > 0 {
 		conn.nextACK += 1
 	}
 	return n, err
@@ -117,14 +117,10 @@ func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 
 //B
 func (conn *Conn) WriteWithHeader(b []byte) (n int, err error) {
-	var remoteadd [4]byte
-	binary.BigEndian.PutUint32(remoteadd[:], conn.remoteAddress)
-	to := syscall.SockaddrInet4{
-		Port: conn.remotePort,
-		Addr: remoteadd,
-	}
-	conn.nextSEQ += len(b)-20
-	return len(b), syscall.Sendto(conn.fd, b, 0, &to)
+
+	conn.nextSEQ += len(b) - 20
+	// fmt.Print("Writing\n")
+	return conn.internalConn.Write(b)
 }
 
 func (conn *Conn) CloseRequest() (err error) {
@@ -160,12 +156,12 @@ func (conn *Conn) CloseRequest() (err error) {
 		if n, err := conn.ReadWithHeader(buf); n > 0 && err == nil {
 			var hdr header.TCP
 			hdr.Unmarshal(buf)
+			// fmt.Print(hdr.Flags)
 			if hdr.Flags == (header.ACK | header.FIN) {
 				close(done)
 				break
 			}
 		}
-
 		select {
 		case <-after:
 			err = fmt.Errorf("timeout")
@@ -177,7 +173,7 @@ func (conn *Conn) CloseRequest() (err error) {
 	if err != nil {
 		return err
 	}
-	conn.nextSEQ ++ 
+	conn.nextSEQ++
 	tcpPacket = header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
 		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
 	conn.WriteWithHeader(tcpPacket)
@@ -253,16 +249,11 @@ func (conn *Conn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-
 // TODO: implement
 func (conn *Conn) LocalAddr() net.Addr {
-	return &net.UDPAddr{
-
-	}
+	return &net.UDPAddr{}
 }
 
 func (conn *Conn) RemoteAddr() net.Addr {
-	return &net.UDPAddr{
-		
-	}
+	return &net.UDPAddr{}
 }
