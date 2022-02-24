@@ -1,9 +1,15 @@
 package netinfo
 
 import (
+	"encoding"
+	"encoding/binary"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/patrickmn/go-cache"
 )
 
 //aa:bb:cc:dd:ee:ff -> [6]byte{}
@@ -68,14 +74,32 @@ func iprs2ip(s string) uint32 {
 var routes, _ = NewRoute()
 var locals, _ = NewLocal()
 
+var localAddressCache cache.Cache = *cache.New(time.Minute*5, time.Minute*10)
 func GetSrcIpForDst(ip uint32) (uint32, error) {
-	dev, err := routes.GetDevice(ip)
+	if lAddr, ok := localAddressCache.Get(Ip2s(ip)); ok {
+		return lAddr.(uint32), nil
+	}
+	raddr := net.IPAddr{
+		IP: make([]byte, 4),
+	}
+	binary.BigEndian.PutUint32(raddr.IP, ip)
+	conn, err := net.DialIP("ip4", nil, &raddr)
 	if err != nil {
 		return 0, err
 	}
-	int, err := locals.GetInterfaceByName(dev)
+	laddr, err := B2ip(conn.LocalAddr().(*net.IPAddr).IP)
 	if err != nil {
 		return 0, err
 	}
-	return int.Ip, nil
+	localAddressCache.Set(Ip2s(ip), laddr, cache.DefaultExpiration)
+	return laddr, nil
+	// dev, err := routes.GetDevice(ip)
+	// if err != nil {
+	// 	return 0, err
+	// }
+	// int, err := locals.GetInterfaceByName(dev)
+	// if err != nil {
+	// 	return 0, err
+	// }
+	// return int.Ip, nil
 }

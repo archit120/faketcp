@@ -76,7 +76,7 @@ func (conn *PacketConn) bgReader() {
 		} else if hdr.Flags&header.FIN > 0 {
 			conn.closeConnection(hdr, fromPair)
 		} else {
-			n = copy(b, b[20:n])
+			n = copy(b, b[hdr.HeaderLen():n])
 			remoteAdrr, _ := netinfo.B2ip(from.IP)
 			key := getKey(int(hdr.SrcPort), remoteAdrr)
 			var nextACK = hdr.Seq + uint32(n)

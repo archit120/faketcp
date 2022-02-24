@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	conn, err := faketcp.Dial("faketcp", "127.0.0.1:12222")
+	conn, err := faketcp.Dial("faketcp", "aws:443")
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -18,10 +18,11 @@ func main() {
 	defer profile.Start(profile.ProfilePath(".")).Stop()
 
 	fmt.Println("connected")
-	buf := make([]byte, 1024)
-	for i:=0; i<512*1024; i++ {
-		conn.Write(buf)
-	}
+	// buf := make([]byte, 1024)
+	// for i:=0; i<512*1024; i++ {
+	// 	conn.(*faketcp.Conn).Write(buf)
+	// }
+	conn.Close()
 	// go func() {
 	// 	for {
 	// 		buf := make([]byte, 1024)

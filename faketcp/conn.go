@@ -53,11 +53,6 @@ func (conn *Conn) UpdateTime() {
 	conn.LastUpdate = time.Now()
 }
 
-func (conn *Conn) IsTimeout() bool {
-	now := time.Now()
-	return now.Sub(conn.LastUpdate) > time.Second*time.Duration(CONNTIMEOUT)
-}
-
 func (conn *Conn) keepAlive() {
 	for {
 		if conn.State == CLOSED || conn.State == CLOSING {
@@ -78,8 +73,10 @@ func (conn *Conn) Read(b []byte) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	copy(b, b[20:])
-	return n - 20, err
+	var hdr header.TCP
+	hdr.Unmarshal(b)
+	copy(b, b[hdr.HeaderLen():])
+	return n - int(hdr.HeaderLen()), err
 }
 
 //Block
@@ -93,6 +90,9 @@ func (conn *Conn) Write(b []byte) (n int, err error) {
 func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 
 	n, from, err := conn.internalConn.ReadFromIP(b)
+	if err != nil {
+		return n, err
+	}
 	ip, _ := netinfo.B2ip(from.IP)
 	var hdr header.TCP
 	hdr.Unmarshal(b)
@@ -100,15 +100,20 @@ func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 		// Also verify port and checksum !!!
 		// Maybe can ignore checksum
 		n, from, err = conn.internalConn.ReadFromIP(b)
+		if err != nil {
+			return n, err
+		}
+	
 		ip, _ = netinfo.B2ip(from.IP)
 		hdr.Unmarshal(b)
 		// fmt.Print(hdr)
 	}
 	if err != nil {
-		return 0, err
+		return n, err
 	}
-
-	conn.nextACK = int(hdr.Seq) + n
+	hdr_len := int(hdr.HeaderLen())
+	fmt.Println("\n", hdr.Seq, n, n-hdr_len, conn.nextACK)
+	conn.nextACK = int(hdr.Seq) + n - hdr_len
 	if hdr.Flags&header.SYN > 0 {
 		conn.nextACK += 1
 	}
@@ -134,7 +139,7 @@ func (conn *Conn) CloseRequest() (err error) {
 
 	conn.State = CLOSING
 	tcpPacket := header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
-		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.FIN, []byte{})
+		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.FIN|header.ACK, []byte{})
 
 	done := make(chan int)
 	go func() {
@@ -238,7 +243,7 @@ func (conn *Conn) Close() error {
 	return nil
 }
 func (conn *Conn) SetDeadline(t time.Time) error {
-	return nil
+	return conn.internalConn.SetDeadline(t)
 }
 
 func (conn *Conn) SetReadDeadline(t time.Time) error {
