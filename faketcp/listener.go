@@ -9,6 +9,11 @@ import (
 var LISTENERBUFSIZE = 1024
 
 func ListenPacket(proto, addr string) (*PacketConn, error) {
+	tcpSqautter, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
 	internalConn, err := net.ListenIP("ip4:6", nil)
 	if err != nil {
 		return nil, err
@@ -20,7 +25,8 @@ func ListenPacket(proto, addr string) (*PacketConn, error) {
 		return nil, err
 	}
 
-	return NewPacketConn(0, localPort, internalConn), nil
+	tcpSqautter.Close()
+	return NewPacketConn(0, localPort, internalConn, tcpSqautter.(*net.TCPListener)), nil
 }
 
 // type Listener struct {

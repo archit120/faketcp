@@ -26,6 +26,7 @@ type dataAdressPair struct {
 type PacketConn struct {
 	localPort  int
 	internalConn *net.IPConn
+	TcpSquatter *net.TCPListener
 	// fd         int
 	InputChan  chan dataAdressPair
 	OutputChan chan dataAdressPair
@@ -33,7 +34,7 @@ type PacketConn struct {
 	nextSEQ    *cache.Cache
 }
 
-func NewPacketConn(localAddr uint32, localPort int, internalConn *net.IPConn) *PacketConn {
+func NewPacketConn(localAddr uint32, localPort int, internalConn *net.IPConn, tcpSquatter *net.TCPListener) *PacketConn {
 	conn := &PacketConn{
 		localPort:  localPort,
 		internalConn:         internalConn,
@@ -41,6 +42,7 @@ func NewPacketConn(localAddr uint32, localPort int, internalConn *net.IPConn) *P
 		nextSEQ:    cache.New(15*time.Second, 1*time.Minute),
 		InputChan:  make(chan dataAdressPair, PACKETCONNBUFFERSIZE),
 		OutputChan: make(chan dataAdressPair, PACKETCONNBUFFERSIZE),
+		// TcpSquatter: tcpSquatter,
 	}
 
 	go conn.bgReader()
@@ -74,6 +76,7 @@ func (conn *PacketConn) bgReader() {
 		if hdr.Flags&header.SYN > 0 {
 			conn.acceptConnection(hdr, fromPair)
 		} else if hdr.Flags&header.FIN > 0 {
+			fmt.Print("Close reques")
 			conn.closeConnection(hdr, fromPair)
 		} else {
 			n = copy(b, b[hdr.HeaderLen():n])
@@ -115,6 +118,7 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *IpPortPair) 
 	localAddr, err := netinfo.GetSrcIpForDst(remoteAdrr)
 	if err != nil {
 		fmt.Errorf("Error in closeConnection while finding local address to use\n")
+		fmt.Print(err)
 		return
 	}
 	key := getKey(from.Port, remoteAdrr)
@@ -128,8 +132,7 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *IpPortPair) 
 	}
 	tcpPacket := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr,
 		uint16(from.Port), nextSeq.(uint32), nextAck.(uint32), header.FIN|header.ACK, []byte{})
-
-	conn.nextAck.Delete(key)
+	fmt.Print("Writing")
 	conn.internalConn.WriteToIP(tcpPacket, from.Addr)
 }
 

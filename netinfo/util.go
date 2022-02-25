@@ -1,7 +1,6 @@
 package netinfo
 
 import (
-	"encoding"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -71,8 +70,8 @@ func iprs2ip(s string) uint32 {
 	return uint32(r)
 }
 
-var routes, _ = NewRoute()
-var locals, _ = NewLocal()
+// var routes, _ = NewRoute()
+// var locals, _ = NewLocal()
 
 var localAddressCache cache.Cache = *cache.New(time.Minute*5, time.Minute*10)
 func GetSrcIpForDst(ip uint32) (uint32, error) {
@@ -83,7 +82,7 @@ func GetSrcIpForDst(ip uint32) (uint32, error) {
 		IP: make([]byte, 4),
 	}
 	binary.BigEndian.PutUint32(raddr.IP, ip)
-	conn, err := net.DialIP("ip4", nil, &raddr)
+	conn, err := net.DialIP("ip4:6", nil, &raddr)
 	if err != nil {
 		return 0, err
 	}

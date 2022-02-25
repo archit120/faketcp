@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	conn, err := faketcp.Dial("faketcp", "aws:443")
+	conn, err := faketcp.Dial("faketcp", "127.0.0.1:12222")
 	if err != nil {
 		fmt.Println(err)
 		return
