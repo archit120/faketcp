@@ -7,10 +7,12 @@ import (
 	// "time"
 
 	"github.com/archit120/faketcp/faketcp"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	// faketcp.Init("eth0")
+	logrus.SetLevel(logrus.DebugLevel)
 
 	ln, err := faketcp.ListenPacket("faketcp", ":12222")
 	if err != nil {
@@ -22,7 +24,9 @@ func main() {
 	buffer := make([]byte, 1024)
 	for {
 		n, from, _ := ln.ReadFrom(buffer)
-		ln.WriteTo(buffer[:n], from)
+		if n!= 0 {
+			ln.WriteTo(buffer[:n], from)
+		}
 	}
 	fmt.Println(t2.Sub(t1))
 }

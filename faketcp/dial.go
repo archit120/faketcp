@@ -11,6 +11,7 @@ import (
 
 	"github.com/archit120/faketcp/header"
 	"github.com/archit120/faketcp/netinfo"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -72,21 +73,19 @@ func Dial(proto string, remoteAddr string) (net.Conn, error) {
 		}
 		select {
 		case <-after:
-			err = fmt.Errorf("timeout")
 			timeOut = true
 		default:
 		}
 	}
 
-	// if err != nil {
-	// 	return nil, err
-	// }
+	if timeOut {
+		logrus.Warn("Server did not respond to our connection request. Most probably we are not connected!")
+	}
 	conn.nextSEQ++
 
 	//seq, ack := 1, tcpHeader.Seq+1
 	conn.State = CONNECTED
 	conn.SetDeadline(time.Time{})
-	fmt.Print(conn.nextACK)
 	tcpPacket = header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress, uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
 	conn.WriteWithHeader(tcpPacket)
 

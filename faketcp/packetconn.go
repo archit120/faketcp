@@ -1,7 +1,6 @@
 package faketcp
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"time"
@@ -9,6 +8,7 @@ import (
 	"github.com/archit120/faketcp/header"
 	"github.com/archit120/faketcp/netinfo"
 	"github.com/patrickmn/go-cache"
+	"github.com/sirupsen/logrus"
 )
 
 var PACKETCONNBUFFERSIZE = 1024
@@ -65,8 +65,9 @@ func (conn *PacketConn) bgReader() {
 		}
 
 		if err != nil {
-			fmt.Errorf("Error occured in PacketConn bgReader")
-			fmt.Print(err)
+			logrus.Error("Error occured in PacketConn bgReader")
+			logrus.Error(err)
+			conn.internalConn.Close()
 			return
 		}
 		fromPair := &IpPortPair{
@@ -74,9 +75,10 @@ func (conn *PacketConn) bgReader() {
 			Port: int(hdr.SrcPort),
 		}
 		if hdr.Flags&header.SYN > 0 {
+			logrus.Debug("Received request to open connection")
 			conn.acceptConnection(hdr, fromPair)
 		} else if hdr.Flags&header.FIN > 0 {
-			fmt.Print("Close reques")
+			logrus.Debug("Received request to close connection")
 			conn.closeConnection(hdr, fromPair)
 		} else {
 			n = copy(b, b[hdr.HeaderLen():n])
@@ -101,7 +103,7 @@ func (conn *PacketConn) acceptConnection(tcpHeader header.TCP, from *IpPortPair)
 	remoteAdrr, _ := netinfo.B2ip(from.Addr.IP)
 	localAddr, err := netinfo.B2ip(conn.internalConn.LocalAddr().(*net.IPAddr).IP)
 	if err != nil {
-		fmt.Errorf("Error in acceptConnection while finding local address to use\n")
+		logrus.Error("Error in acceptConnection while finding local address to use\n")
 		return
 	}
 	tcpPacket := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr,
@@ -117,8 +119,7 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *IpPortPair) 
 	remoteAdrr, _ := netinfo.B2ip(from.Addr.IP)
 	localAddr, err := netinfo.GetSrcIpForDst(remoteAdrr)
 	if err != nil {
-		fmt.Errorf("Error in closeConnection while finding local address to use\n")
-		fmt.Print(err)
+		logrus.Error("Error in closeConnection while finding local address to use\n")
 		return
 	}
 	key := getKey(from.Port, remoteAdrr)
@@ -132,7 +133,6 @@ func (conn *PacketConn) closeConnection(tcpHeader header.TCP, from *IpPortPair) 
 	}
 	tcpPacket := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr,
 		uint16(from.Port), nextSeq.(uint32), nextAck.(uint32), header.FIN|header.ACK, []byte{})
-	fmt.Print("Writing")
 	conn.internalConn.WriteToIP(tcpPacket, from.Addr)
 }
 
@@ -160,6 +160,7 @@ func (conn *PacketConn) WriteTo(p []byte, addr *IpPortPair) (n int, err error) {
 	}
 	packet := header.BuildTcpPacket(localAddr, uint16(conn.localPort), remoteAdrr, uint16(addr.Port), nextSeq.(uint32), nextAck.(uint32), header.ACK, p)
 	conn.nextSEQ.Set(key, uint32(nextSeq.(uint32)+uint32(len(p))), cache.DefaultExpiration)
+	logrus.Debug("Writing packet to ", addr, " with ACK " )
 	return conn.internalConn.WriteToIP(packet, addr.Addr)
 }
 

@@ -2,12 +2,12 @@ package faketcp
 
 import (
 	// "encoding/binary"
-	"fmt"
 	"net"
 	"time"
 
 	"github.com/archit120/faketcp/header"
 	"github.com/archit120/faketcp/netinfo"
+	"github.com/sirupsen/logrus"
 )
 
 var CONNCHANBUFSIZE = 1024
@@ -112,7 +112,7 @@ func (conn *Conn) ReadWithHeader(b []byte) (n int, err error) {
 		return n, err
 	}
 	hdr_len := int(hdr.HeaderLen())
-	fmt.Println("\n", hdr.Seq, n, n-hdr_len, conn.nextACK)
+	logrus.Debug("Read packet with size ", n, " and flags ", hdr.Flags)
 	conn.nextACK = int(hdr.Seq) + n - hdr_len
 	if hdr.Flags&header.SYN > 0 {
 		conn.nextACK += 1
@@ -153,7 +153,7 @@ func (conn *Conn) CloseRequest() (err error) {
 			time.Sleep(time.Millisecond * RETRYINTERVAL)
 		}
 	}()
-
+	conn.SetDeadline(time.Now().Add(time.Millisecond * RETRYINTERVAL * RETRYTIME))
 	after := time.After(time.Millisecond * RETRYINTERVAL * RETRYTIME)
 	buf := make([]byte, BUFFERSIZE)
 	timeOut := false
@@ -169,16 +169,18 @@ func (conn *Conn) CloseRequest() (err error) {
 		}
 		select {
 		case <-after:
-			err = fmt.Errorf("timeout")
 			timeOut = true
 		default:
 		}
 	}
 
-	if err != nil {
+	if timeOut {
+		logrus.Warn("FIN not received from server. Going forward with disconnection")
 		return err
 	}
 	conn.nextSEQ++
+	conn.SetDeadline(time.Time{})
+
 	tcpPacket = header.BuildTcpPacket(conn.localAddress, uint16(conn.localPort), conn.remoteAddress,
 		uint16(conn.remotePort), uint32(conn.nextSEQ), uint32(conn.nextACK), header.ACK, []byte{})
 	conn.WriteWithHeader(tcpPacket)
